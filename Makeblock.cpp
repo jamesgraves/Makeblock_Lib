@@ -1,10 +1,15 @@
 #include "Makeblock.h"
 #include <avr/interrupt.h>
 #include <Arduino.h> 
+#if defined(__AVR_ATmega2560__)
+
+MePort_Sig mePort[15] = {{NC, NC}, {11, 10}, {3, 9}, {13, 12}, {2, 8},
+    {1, 0}, {17, 16}, {15,NC}, {14, NC}, {6, 7}, {5,4},{42,44},{43,45},{47,46},{34,35}};
+#else
 
 MePort_Sig mePort[11] = {{NC, NC}, {11, 10}, {3, 9}, {13, 12}, {2, 8},
-                      {1, 0}, {17, 16}, {15,NC}, {14, NC}, {5,4}, {6, 7}}; 
-
+                      {1, 0}, {17, 16}, {15,NC}, {14, NC}, {6, 7}, {5,4}}; 
+#endif
 /*        Port       */
 MePort::MePort(uint8_t port)
 {
@@ -132,26 +137,45 @@ MeSerial::MeSerial(uint8_t port):MePort(port),swSerial(s1,s2){
 }
 void MeSerial::begin(long baudrate){
 	if(_hard){
-		Serial.begin(baudrate);
+        #if defined(__AVR_ATmega2560__)
+            Serial1.begin(baudrate);
+        #else
+            Serial.begin(baudrate);
+        #endif
 	}else{
 		swSerial.begin(baudrate);
 	}
 }
 size_t MeSerial::write(uint8_t byte){
 	if(_isServoBusy==true)return -1;
-	if(_hard)
-	return Serial.write(byte);
+	if(_hard){
+        #if defined(__AVR_ATmega2560__)
+            return Serial1.write(byte);
+        #else
+            return Serial.write(byte);
+        #endif
+    }
 	return swSerial.write(byte);
 }
 int MeSerial::read(){
 	if(_isServoBusy==true)return -1;
-	if(_hard)
-	return Serial.read();
+	if(_hard){
+        #if defined(__AVR_ATmega2560__)
+            return Serial1.read();
+        #else
+            return Serial.read();
+        #endif
+    }
 	return swSerial.read();
 }
 int MeSerial::available(){
-	if(_hard)
-		return Serial.available();
+	if(_hard){
+        #if defined(__AVR_ATmega2560__)
+            return Serial1.available();
+        #else
+            return Serial.available();
+        #endif
+    }
 	return swSerial.available();
 }
 bool MeSerial::listen(){
@@ -169,10 +193,51 @@ bool MeSerial::paramAvailable(){
 	if(c>-1){
 		if(c=='\n'){
 			_params.clear();
-			char str[_index];
+            char str[_index];
+            int i;
+            bool isString = true;
+            for (i=0; i<_index; i++) {
+                if(_cmds[i]==':'){
+                    isString = false;
+                }
+            }
 			_cmds[_index]='\0';
 			strcpy(str,_cmds);
-			findParamName(str,_index+1);
+            
+            if (isString) {
+                if(_cmds[0]=='U'&&_cmds[1]=='p'){
+                    _params.setParam("Up","OK");
+                }
+                if(_cmds[0]=='D'&&_cmds[1]=='o'&&_cmds[2]=='w'&&_cmds[3]=='n'){
+                    _params.setParam("Down","OK");
+                }
+                if(_cmds[0]=='L'&&_cmds[1]=='e'&&_cmds[2]=='f'&&_cmds[3]=='t'){
+                    _params.setParam("Left","OK");
+                }
+                if(_cmds[0]=='R'&&_cmds[1]=='i'&&_cmds[2]=='g'&&_cmds[3]=='h'&&_cmds[4]=='t'){
+                    _params.setParam("Right","OK");
+                }
+                if(_cmds[0]=='L'&&_cmds[1]=='1'){
+                    _params.setParam("L1","OK");
+                }
+                if(_cmds[0]=='R'&&_cmds[1]=='1'){
+                    _params.setParam("R1","OK");
+                }
+                if(_cmds[0]=='X'&&_cmds[1]!='B'){
+                    _params.setParam("X","OK");
+                }
+                if(_cmds[0]=='Y'){
+                    _params.setParam("Y","OK");
+                }
+                if(_cmds[0]=='A'){
+                    _params.setParam("A","OK");
+                }
+                if(_cmds[0]=='B'){
+                    _params.setParam("B","OK");
+                }
+            }else{
+                findParamName(str,_index+1);
+            }
 			_index=0;
 			return true;
 		}else{
@@ -192,9 +257,10 @@ MeParams MeSerial::getParams(){
   return _params;
 }
 void MeSerial::findParamName(char* str,int len){
+    
   byte i = 0;
   for(i=0;i<len;i++){
-   if(str[i]=='='){
+   if(str[i]==':'){
     char name[i+1];
      memcpy(name,str,i);
      name[i]='\0';
@@ -210,8 +276,9 @@ void MeSerial::findParamName(char* str,int len){
 }
 void MeSerial::findParamValue(char* str,int len,char*name){
   byte i = 0;
+    
   for(i=0;i<len;i++){ 
-   if(str[i]=='&'||str[i]=='\0'||i==len-1){
+   if(str[i]=='&'||str[i]=='\t'||str[i]=='\0'||i==len-1){
     char v[i+1];
      memcpy(v,str,i);
      v[i]='\0';
@@ -544,6 +611,7 @@ MeParamObject* MeParams::getParam(const char *string){
 void MeParams::setParam(const char* name,char* n){
 	double v = strtod(n,NULL);
 	deleteParam(name);
+
 	if(v==NULL){
 		addItemToObject(name, createCharItem(n));
 	}else{
@@ -551,10 +619,14 @@ void MeParams::setParam(const char* name,char* n){
 	}
 }
 double MeParams::getParamValue(const char *string){
-	return getParam(string)->value;
+    double n =getParam(string)->value;
+    setParam(string,"\0");
+	return n;
 }
 char* MeParams::getParamCode(const char *string){
-	return getParam(string)->code;
+    char *s = strdup(getParam(string)->code);
+    setParam(string,"\0");
+	return s;
 }
 void MeParams::clear(){
 	unsigned char i = 0;
@@ -594,6 +666,7 @@ MeParamObject* MeParams::createCharItem(char *n){
 void MeParams::addItemToObject(const char *string,MeParamObject *item){
   if (!item)
     return;
+    
   if (item->name)
     free(item->name);
   item->name = strdup(string);

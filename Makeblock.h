@@ -19,7 +19,12 @@
 #define PORT_8 0x08
 #define M1     0x09
 #define M2     0x0a
-
+#if defined(__AVR_ATmega2560__)
+#define M3     0x0b
+#define M4     0x0c
+#define M5     0x0d
+#define PORT_9 0x0e
+#endif
 #define DEV1 1
 #define DEV2 2
 
@@ -28,8 +33,11 @@ typedef struct {
   uint8_t s1;
   uint8_t s2;
 }MePort_Sig;
+#if defined(__AVR_ATmega2560__)
+extern MePort_Sig mePort[15];//mePort[0] is nonsense
+#else
 extern MePort_Sig mePort[11];//mePort[0] is nonsense
-
+#endif
 
 
 
@@ -544,6 +552,10 @@ typedef enum { _timer1, _Nbr_16timers } timer16_Sequence_t ;
 
 #define Servo_VERSION           2      // software version of this library
 
+#define ME_DIGITAL_SERVO_MIN_PULSE 950
+#define ME_DIGITAL_SERVO_MAX_PULSE 2050
+#define ME_ANALOG_SERVO_MIN_PULSE 544 //500
+#define ME_ANALOG_SERVO_MAX_PULSE 2400 //2500
 #define MIN_PULSE_WIDTH       500     // the shortest pulse sent to a servo  
 #define MAX_PULSE_WIDTH      2500     // the longest pulse sent to a servo 
 #define DEFAULT_PULSE_WIDTH  1500     // default pulse width when servo is attached
